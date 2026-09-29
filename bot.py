@@ -39,7 +39,7 @@ async def start_handler(event):
     user_id = event.sender_id
     user_states[user_id] = {'step': 'WAITING_START'}
     await event.reply(
-        "👋 Welcome! Chaliye bina kisi miss ke safely messages forward karte hain.\n\n"
+        "👋 Welcome! Chaliye safely messages forward karte hain.\n\n"
         "Sabse pehle, channel ke us message ki **START link** bhejo jahan se shuru karni hai:"
     )
 
@@ -59,12 +59,12 @@ async def message_handler(event):
     text = event.raw_text.strip()
 
     if state == 'WAITING_START':
-        channel_entity, msg_id = parse_message_link(text)
-        if not channel_entity or not msg_id:
+        channel_identifier, msg_id = parse_message_link(text)
+        if not channel_identifier or not msg_id:
             await event.reply("❌ Yeh link galat lag raha hai. Sahi Telegram message link bhejo:")
             return
         
-        user_states[user_id]['channel'] = channel_entity
+        user_states[user_id]['channel'] = channel_identifier
         user_states[user_id]['start_id'] = msg_id
         user_states[user_id]['step'] = 'WAITING_END'
         await event.reply("✅ Start link save ho gaya!\n\nAb channel ke us message ki **END link** bhejo jahan tak forward karna hai:")
@@ -80,30 +80,45 @@ async def message_handler(event):
         await event.reply("✅ End link bhi save ho gaya!\n\nAb apne group ke us **Topic ka link** bhejo jahan messages bhejne hain:")
 
     elif state == 'WAITING_TOPIC':
-        group_entity, topic_id = parse_topic_link(text)
-        if not group_entity or not topic_id:
+        group_identifier, topic_id = parse_topic_link(text)
+        if not group_identifier or not topic_id:
             await event.reply("❌ Yeh topic link galat lag raha hai. Sahi Group Topic link bhejo:")
             return
         
         data = user_states.pop(user_id, {})
-        channel_entity = data.get('channel')
+        raw_channel = data.get('channel')
         start_id = data.get('start_id')
         end_id = data.get('end_id')
 
-        status_msg = await event.reply("🚀 Links mil gaye! Bot actual messages fetch karke 100-100 ke batch mein safely forward kar raha hai...")
+        status_msg = await event.reply("🔄 Connecting to channel and group...")
+
+        try:
+            # Explicitly entities fetch karna taaki bot fasse nahi
+            channel_entity = await client.get_entity(raw_channel)
+            group_entity = await client.get_entity(group_identifier)
+        except Exception as e:
+            await status_msg.edit(f"❌ Entity error: Channel ya Group access nahi ho pa raha hai. Error: {e}")
+            return
+
+        await status_msg.edit("🚀 Connected! Messages fetch kiye ja rahe hain...")
 
         min_id = min(start_id, end_id) - 1
         max_id = max(start_id, end_id) + 1
 
-        # Telethon automatic sabhi valid existing messages ko fetch karega (no gaps/skips)
         messages_to_forward = []
         async for message in client.iter_messages(channel_entity, min_id=min_id, max_id=max_id, reverse=True):
             messages_to_forward.append(message)
 
         total_messages = len(messages_to_forward)
+        if total_messages == 0:
+            await status_msg.edit("⚠️ Diye gaye range mein koi messages nahi mile!")
+            return
+
+        await status_msg.edit(f"📦 Total **{total_messages}** messages mil gaye hain. Forwarding shuru ho rahi hai...")
+
         forwarded_count = 0
 
-        # 100-100 ke batch mein divide karke bhejna
+        # 100-100 ke batch mein bhejna aur live progress dikhana
         for i in range(0, total_messages, 100):
             batch = messages_to_forward[i:i+100]
             for message in batch:
@@ -111,18 +126,19 @@ async def message_handler(event):
                     await client.forward_messages(
                         entity=group_entity,
                         messages=message,
-                        drop_author=True,    # Sender name hide karne ke liye
-                        reply_to=topic_id    # Specific forum topic mein bhejne ke liye
+                        drop_author=True,
+                        reply_to=topic_id
                     )
                     forwarded_count += 1
                 except Exception as ex:
                     print(f"Error forwarding message: {ex}")
             
-            # Har 100 messages ke baad 3 seconds ka break
+            # Progress update aur 3 seconds ka break
+            await status_msg.edit(f"⏳ Progress: {forwarded_count}/{total_messages} messages forward ho chuke hain...")
             if i + 100 < total_messages:
                 await asyncio.sleep(3)
 
-        await status_msg.edit(f"🎉 Kaam ho gaya! Total **{forwarded_count}** messages bina kisi miss ke successfully topic mein forward ho gaye hain.")
+        await status_msg.edit(f"🎉 Kaam ho gaya! Total **{forwarded_count}** messages successfully topic mein forward ho gaye hain.")
 
 print("Telethon Bot started successfully...")
 client.run_until_disconnected()
