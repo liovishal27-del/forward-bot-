@@ -1,4 +1,5 @@
 import re
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 
@@ -38,7 +39,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_data_store[user_id] = {}
     await update.message.reply_text(
-        "👋 Welcome! Chaliye messages bina sender name ke copy karte hain.\n\n"
+        "👋 Welcome! Chaliye safely messages copy karte hain.\n\n"
         "Sabse pehle, channel ke us message ki **START link** bhejo jahan se shuru karni hai:"
     )
     return WAITING_START_LINK
@@ -86,17 +87,17 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
     start_id = data.get('start_id')
     end_id = data.get('end_id')
     
-    status_msg = await update.message.reply_text("🚀 Links mil gaye! Messages bina sender name ke copy ho rahe hain...")
+    status_msg = await update.message.reply_text("🚀 Links mil gaye! Bot 100-100 ke set mein messages safely forward kar raha hai...")
     
     client_app = context.bot
     min_id = min(start_id, end_id) - 1
     max_id = max(start_id, end_id) + 1
     copied_count = 0
+    batch_count = 0
     
     try:
         for msg_id in range(min_id + 1, max_id):
             try:
-                # yahan forward_message ki jagah copy_message use kiya hai taaki sender name hide ho jaye
                 await client_app.copy_message(
                     chat_id=group_entity,
                     from_chat_id=channel_entity,
@@ -104,10 +105,17 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     message_thread_id=topic_id
                 )
                 copied_count += 1
+                batch_count += 1
+                
+                # Agar 100 messages ho gaye, toh 3 second ka break lega taaki error na aaye
+                if batch_count >= 100:
+                    batch_count = 0
+                    await asyncio.sleep(3)
+                    
             except Exception as ex:
                 print(f"Skipped {msg_id}: {ex}")
                 
-        await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{copied_count}** messages bina sender name ke topic mein bhej diye gaye hain.")
+        await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{copied_count}** messages bina sender name ke safely topic mein bhej diye gaye hain.")
     except Exception as e:
         await status_msg.edit_text(f"⚠️ Kuch error aa gaya: {e}")
         
@@ -131,7 +139,7 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    print("Bot started...")
+    print("Bot started with 100-batch safe system...")
     app.run_polling()
 
 if __name__ == '__main__':
