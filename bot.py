@@ -1,6 +1,6 @@
 import re
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 
 # Aapke diye hue credentials
 API_ID = 26754022
@@ -36,10 +36,10 @@ def parse_topic_link(link):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_data_store[user_id] = {} # Reset session
+    user_data_store[user_id] = {}
     await update.message.reply_text(
-        "👋 Welcome! Chaliye messages forward karte hain.\n\n"
-        "Sabse pehle, channel ke us message ki **START link** bhejo jahan se forwarding shuru karni hai:"
+        "👋 Welcome! Chaliye messages bina sender name ke copy karte hain.\n\n"
+        "Sabse pehle, channel ke us message ki **START link** bhejo jahan se shuru karni hai:"
     )
     return WAITING_START_LINK
 
@@ -55,7 +55,7 @@ async def receive_start_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_data_store[user_id]['channel'] = channel_entity
     user_data_store[user_id]['start_id'] = msg_id
     
-    await update.message.reply_text("✅ Start link save ho gaya!\n\nAb channel ke us message ki **END link** bhejo jahan tak forward karna hai:")
+    await update.message.reply_text("✅ Start link save ho gaya!\n\nAb channel ke us message ki **END link** bhejo jahan tak karna hai:")
     return WAITING_END_LINK
 
 async def receive_end_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -69,11 +69,11 @@ async def receive_end_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_data_store[user_id]['end_id'] = msg_id
     
-    await update.message.reply_text("✅ End link bhi save ho gaya!\n\nAb apne group ke us **Topic ka link** bhejo jahan messages forward karne hain:")
+    await update.message.reply_text("✅ End link bhi save ho gaya!\n\nAb apne group ke us **Topic ka link** bhejo jahan messages bhejne hain:")
     return WAITING_TOPIC_LINK
 
 async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = user_id = update.effective_user.id
+    user_id = update.effective_user.id
     text = update.message.text.strip()
     
     group_entity, topic_id = parse_topic_link(text)
@@ -86,49 +86,38 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
     start_id = data.get('start_id')
     end_id = data.get('end_id')
     
-    status_msg = await update.message.reply_text("🚀 Sabhi links mil gaye! Messages forward hona shuru ho rahe hain...")
+    status_msg = await update.message.reply_text("🚀 Links mil gaye! Messages bina sender name ke copy ho rahe hain...")
     
     client_app = context.bot
     min_id = min(start_id, end_id) - 1
     max_id = max(start_id, end_id) + 1
-    forwarded_count = 0
+    copied_count = 0
     
-    try:
-        # Telethon client yahan bot application ke sath message fetch karega
-        # Note: python-telegram-bot ka use karke forward karne ke liye:
-        async for message in client_app.get_chat_history(channel_entity): # Alternative approach ya Telethon mix
-            pass
-    except Exception as e:
-        print(f"Error: {e}")
-
-    # Yahan hum python-telegram-bot ka forward_message use karenge
     try:
         for msg_id in range(min_id + 1, max_id):
             try:
-                await client_app.forward_message(
+                # yahan forward_message ki jagah copy_message use kiya hai taaki sender name hide ho jaye
+                await client_app.copy_message(
                     chat_id=group_entity,
                     from_chat_id=channel_entity,
                     message_id=msg_id,
                     message_thread_id=topic_id
                 )
-                forwarded_count += 1
+                copied_count += 1
             except Exception as ex:
                 print(f"Skipped {msg_id}: {ex}")
                 
-        await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{forwarded_count}** messages successfully topic mein forward ho gaye hain.")
+        await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{copied_count}** messages bina sender name ke topic mein bhej diye gaye hain.")
     except Exception as e:
-        await status_msg.edit_text(f"⚠️ Kuch error aa gaya forwarding ke dauran: {e}")
+        await status_msg.edit_text(f"⚠️ Kuch error aa gaya: {e}")
         
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Process cancel kar diya gaya hai. Dubara shuru karne ke liye /start bhejein.")
+    await update.message.reply_text("❌ Cancel kar diya gaya. Dubara shuru karne ke liye /start bhejein.")
     return ConversationHandler.END
 
 def main():
-    # python-telegram-bot v20+ syntax
-    from telegram.ext import ConversationHandler
-    
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -142,7 +131,7 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    print("Bot started with Conversation flow...")
+    print("Bot started...")
     app.run_polling()
 
 if __name__ == '__main__':
