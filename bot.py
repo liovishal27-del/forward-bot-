@@ -2,7 +2,7 @@ import re
 import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
-from telegram.error import BadRequest, FloodWait
+from telegram.error import BadRequest, RetryAfter
 
 # Aapke diye hue credentials
 API_ID = 26754022
@@ -39,7 +39,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_data_store[user_id] = {}
     await update.message.reply_text(
-        "👋 Welcome Boss! Flood-protection ke sath bot ready hai.\n\n"
+        "👋 Welcome Boss! Bot ab bilkul ready hai.\n\n"
         "Sabse pehle, channel ke us message ki **START link** bhejo jahan se shuru karni hai:"
     )
     return WAITING_START_LINK
@@ -118,27 +118,25 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         pass
                     await asyncio.sleep(4)
                 
-                msg_id += 1  # Agle message par jao
+                msg_id += 1
                 
-            except FloodWait as fw:
-                # Agar Telegram ne speed rokne ko bola, toh bot utni der chupchap ruk jayega
-                print(f"⚠️ FloodWait hit: Paused for {fw.retry_after} seconds.")
+            except RetryAfter as ra:
+                # Agar Telegram speed limit lagaye, toh bot utni der ruk jayega
+                print(f"⚠️ RetryAfter hit: Paused for {ra.retry_after} seconds.")
                 try:
-                    await status_msg.edit_text(f"⚠️ Telegram speed limit hit! Paused for {fw.retry_after}s...")
+                    await status_msg.edit_text(f"⚠️ Telegram speed limit hit! Paused for {ra.retry_after}s...")
                 except:
                     pass
-                await asyncio.sleep(fw.retry_after + 2)
-                # Yahin same msg_id dobara try karega
+                await asyncio.sleep(ra.retry_after + 2)
                 
             except BadRequest as br:
-                # Agar sach mein message delete ya missing hai, tabhi aage badhega
+                # Agar message delete/missing hai toh aage badh jayega
                 print(f"Skipped missing ID {msg_id}: {br}")
                 msg_id += 1
                 
             except Exception as ex:
                 print(f"Error on ID {msg_id}: {ex}")
                 await asyncio.sleep(2)
-                # Network hiccup hone par same msg_id dobara try karega
                 
         await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{copied_count}** messages bina sender name ke safely topic mein bhej diye gaye hain.")
     except Exception as e:
@@ -164,7 +162,7 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    print("Bot started with FloodWait-safe engine...")
+    print("Bot started successfully with RetryAfter safety engine...")
     app.run_polling()
 
 if __name__ == '__main__':
