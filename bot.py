@@ -2,7 +2,7 @@ import re
 import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
-from telegram.error import BadRequest
+from telegram.error import BadRequest, FloodWait
 
 # Aapke diye hue credentials
 API_ID = 26754022
@@ -39,7 +39,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_data_store[user_id] = {}
     await update.message.reply_text(
-        "👋 Welcome Boss! Bot fully ready hai.\n\n"
+        "👋 Welcome Boss! Flood-protection ke sath bot ready hai.\n\n"
         "Sabse pehle, channel ke us message ki **START link** bhejo jahan se shuru karni hai:"
     )
     return WAITING_START_LINK
@@ -87,7 +87,7 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
     start_id = data.get('start_id')
     end_id = data.get('end_id')
     
-    status_msg = await update.message.reply_text("🚀 Links mil gaye! Bot 100-100 ke batch mein safely copy karna shuru kar raha hai...")
+    status_msg = await update.message.reply_text("🚀 Links mil gaye! Bot 50-50 ke batches mein bina ruke copy karna shuru kar raha hai...")
     
     client_app = context.bot
     min_id = min(start_id, end_id)
@@ -97,7 +97,8 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
     batch_count = 0
     
     try:
-        for msg_id in range(min_id, max_id + 1):
+        msg_id = min_id
+        while msg_id <= max_id:
             try:
                 await client_app.copy_message(
                     chat_id=group_entity,
@@ -108,26 +109,40 @@ async def receive_topic_link(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 copied_count += 1
                 batch_count += 1
                 
-                # Agar 100 messages ho gaye, toh 3 seconds ka break
-                if batch_count >= 100:
+                # Har 50 messages ke baad 4 seconds ka proper rest
+                if batch_count >= 50:
                     batch_count = 0
                     try:
-                        await status_msg.edit_text(f"⏳ Progress: {copied_count} messages copy ho chuke hain... (Resting for 3s)")
+                        await status_msg.edit_text(f"⏳ Progress: {copied_count} messages successfully copy ho chuke hain... (Resting for 4s)")
                     except:
                         pass
-                    await asyncio.sleep(3)
-                    
+                    await asyncio.sleep(4)
+                
+                msg_id += 1  # Agle message par jao
+                
+            except FloodWait as fw:
+                # Agar Telegram ne speed rokne ko bola, toh bot utni der chupchap ruk jayega
+                print(f"⚠️ FloodWait hit: Paused for {fw.retry_after} seconds.")
+                try:
+                    await status_msg.edit_text(f"⚠️ Telegram speed limit hit! Paused for {fw.retry_after}s...")
+                except:
+                    pass
+                await asyncio.sleep(fw.retry_after + 2)
+                # Yahin same msg_id dobara try karega
+                
             except BadRequest as br:
-                # Agar koi message delete ho gaya hai ya exist nahi karta, toh error na dekar aage badh jayega
-                print(f"Skipped missing message ID {msg_id}: {br}")
-                continue
+                # Agar sach mein message delete ya missing hai, tabhi aage badhega
+                print(f"Skipped missing ID {msg_id}: {br}")
+                msg_id += 1
+                
             except Exception as ex:
                 print(f"Error on ID {msg_id}: {ex}")
-                continue
+                await asyncio.sleep(2)
+                # Network hiccup hone par same msg_id dobara try karega
                 
         await status_msg.edit_text(f"🎉 Kaam ho gaya! Total **{copied_count}** messages bina sender name ke safely topic mein bhej diye gaye hain.")
     except Exception as e:
-        await status_msg.edit_text(f"⚠️ Kuch error aa gaya: {e}")
+        await status_msg.edit_text(f"⚠️ Kuch bada error aa gaya: {e}")
         
     return ConversationHandler.END
 
@@ -149,7 +164,7 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    print("Bot started successfully with robust batch copying...")
+    print("Bot started with FloodWait-safe engine...")
     app.run_polling()
 
 if __name__ == '__main__':
