@@ -1,15 +1,10 @@
-import os
 import re
 from telethon import TelegramClient, events
 
-# Railway environment variables se credentials uthayega
-api_id = int(os.environ.get('26754022', 0))
-api_hash = os.environ.get('1a0b65e7a4d48e08687c732bdc0f2cc4', '1a0b65e7a4d48e08687c732bdc0f2cc4')
-bot_token = os.environ.get('8394573713:AAFh-a4ImwAKmm7okKx52RQs1KqjEvHf-Z0', '8394573713:AAFh-a4ImwAKmm7okKx52RQs1KqjEvHf-Z0')
-
-if not api_id or not api_hash or not bot_token:
-    print("❌ Error: API_ID, API_HASH, aur BOT_TOKEN environment variables set karna zaroori hai!")
-    exit(1)
+# Aapke diye hue credentials
+api_id = 26754022
+api_hash = '1a0b65e7a4d48e08687c732bdc0f2cc4'
+bot_token = '8394573713:AAFh-a4ImwAKmm7okKx52RQs1KqjEvHf-Z0'
 
 client = TelegramClient('bot_session', api_id, api_hash).start(bot_token=bot_token)
 
@@ -82,5 +77,5 @@ async def forward_handler(event):
 
     await status_msg.edit(f"🎉 Kaam ho gaya! Total **{forwarded_count}** messages successfully topic mein forward ho gaye hain.")
 
-print("Bot is up and running on Railway...")
+print("Bot is up and running...")
 client.run_until_disconnected()
