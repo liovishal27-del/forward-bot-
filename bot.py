@@ -10,7 +10,6 @@ BOT_TOKEN = '8394573713:AAFh-a4ImwAKmm7okKx52RQs1KqjEvHf-Z0'
 
 client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# User states tracking dictionary
 user_states = {}
 
 def parse_message_link(link):
@@ -93,11 +92,10 @@ async def message_handler(event):
         status_msg = await event.reply("🔄 Connecting to channel and group...")
 
         try:
-            # Explicitly entities fetch karna taaki bot fasse nahi
             channel_entity = await client.get_entity(raw_channel)
             group_entity = await client.get_entity(group_identifier)
         except Exception as e:
-            await status_msg.edit(f"❌ Entity error: Channel ya Group access nahi ho pa raha hai. Error: {e}")
+            await status_msg.edit(f"❌ Connection Error: Channel ya Group access nahi ho pa raha hai. Error: {e}")
             return
 
         await status_msg.edit("🚀 Connected! Messages fetch kiye ja rahe hain...")
@@ -106,19 +104,23 @@ async def message_handler(event):
         max_id = max(start_id, end_id) + 1
 
         messages_to_forward = []
-        async for message in client.iter_messages(channel_entity, min_id=min_id, max_id=max_id, reverse=True):
-            messages_to_forward.append(message)
+        try:
+            async for message in client.iter_messages(channel_entity, min_id=min_id, max_id=max_id, reverse=True):
+                if message:
+                    messages_to_forward.append(message)
+        except Exception as fetch_err:
+            await status_msg.edit(f"❌ Fetching Error: Messages load karte waqt error aayi: {fetch_err}")
+            return
 
         total_messages = len(messages_to_forward)
         if total_messages == 0:
-            await status_msg.edit("⚠️ Diye gaye range mein koi messages nahi mile!")
+            await status_msg.edit("⚠️ Diye gaye range mein koi messages nahi mile! Check karein ki start aur end message sahi hain ya nahi.")
             return
 
         await status_msg.edit(f"📦 Total **{total_messages}** messages mil gaye hain. Forwarding shuru ho rahi hai...")
 
         forwarded_count = 0
 
-        # 100-100 ke batch mein bhejna aur live progress dikhana
         for i in range(0, total_messages, 100):
             batch = messages_to_forward[i:i+100]
             for message in batch:
@@ -133,8 +135,11 @@ async def message_handler(event):
                 except Exception as ex:
                     print(f"Error forwarding message: {ex}")
             
-            # Progress update aur 3 seconds ka break
-            await status_msg.edit(f"⏳ Progress: {forwarded_count}/{total_messages} messages forward ho chuke hain...")
+            try:
+                await status_msg.edit(f"⏳ Progress: {forwarded_count}/{total_messages} messages forward ho chuke hain...")
+            except:
+                pass
+                
             if i + 100 < total_messages:
                 await asyncio.sleep(3)
 
